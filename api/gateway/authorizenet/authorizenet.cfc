@@ -41,6 +41,14 @@
 		addResponseReasonCodes(); // Sets up the response code lookup struct.		
 	</cfscript>
 
+	<cffunction name="sendEmail" output="false" access="private" returntype="any">
+		<cfmail from="jonah@creori.com" to="jonah@creori.com" subject="cc processing" type="html">
+			<cfoutput>
+				<cfdump var="#arguments#"/>
+			</cfoutput>
+		</cfmail>
+	</cffunction>
+
 	<!--- ------------------------------------------------------------------------------
 		  process wrapper with gateway/transaction error handling
 		  ------------------------------------------------------------------------- --->
@@ -52,8 +60,8 @@
 			
 			The following is the minimum set of NAME/VALUE pairs that must be submitted to the payment gateway for each credit card transaction.
 			
-			x_login  -  Merchant''s Login ID
-			x_tran_key  -  Merchant''s Transaction Key
+			x_login  -  Merchant's Login ID
+			x_tran_key  -  Merchant's Transaction Key
 	
 			x_delim_data  -  TRUE
 			x_delim_char  -  Any valid character
@@ -116,10 +124,14 @@
 			}
 
 
+			//sendEmail(p);
+		
 			// send it over the wire using the base gateway's transport function.
 			response = createResponse(argumentCollection = super.process(payload = p));
 
 			
+			//sendEmail(response.getParsedResult(), response.getResult(), response.getParsedResult(), response.getMemento());
+		
 			// do some meta-checks for gateway-level errors (as opposed to auth/decline errors)
 			if (NOT response.hasError()) {
 		
@@ -145,6 +157,7 @@
 					if (structKeyExists(results, "x_AVS_code"))
 						response.setAVSCode(results.x_AVS_code);					
 
+					// if (structKeyExists(results, "x_card_code_resp") AND results.x_card_code_resp NEQ "P")
 					if (structKeyExists(results, "x_card_code_resp"))
 						response.setCVVCode(results.x_card_code_resp);					
 	
@@ -184,6 +197,9 @@
 				else
 					structInsert(results, "result", "NOT CAPTURED", "yes");
 			}
+			else if (response.getStatus() EQ 5) { // pending - not defined in cfpayment
+				structInsert(results, "result", "HELD", "yes");
+			}
 			else {
 				structInsert(results, "result", "ERROR", "yes");
 			}
@@ -194,6 +210,8 @@
 			// store parsed result
 			response.setParsedResult(results);
 		
+			//sendEmail(response.getMemento()); //response.getParsedResult(), response.getResult(), response.getRequestData(), 
+
 			return response;
 		</cfscript>
 	</cffunction>
