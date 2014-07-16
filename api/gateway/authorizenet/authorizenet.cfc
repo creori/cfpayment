@@ -41,14 +41,6 @@
 		addResponseReasonCodes(); // Sets up the response code lookup struct.		
 	</cfscript>
 
-	<cffunction name="sendEmail" output="false" access="private" returntype="any">
-		<cfmail from="jonah@creori.com" to="jonah@creori.com" subject="cc processing" type="html">
-			<cfoutput>
-				<cfdump var="#arguments#"/>
-			</cfoutput>
-		</cfmail>
-	</cffunction>
-
 	<!--- ------------------------------------------------------------------------------
 		  process wrapper with gateway/transaction error handling
 		  ------------------------------------------------------------------------- --->
@@ -91,15 +83,17 @@
 			var pairs = "";
 			var ii = 1;
 			var numPairs = 0;
-			p = arguments.payload; // shortcut (by reference)
+			var p = arguments.payload; // shortcut (by reference)
 	
 			//fold in any optional data
 			structAppend(p, arguments.options, true);
 		
 			// Translate to Authorize.net specific name.
-			if (structKeyExists(arguments.options, "orderID"))
+			if (structKeyExists(arguments.options, "orderID")) {
 				structInsert(p, "x_invoice_num", arguments.options.orderID, "yes");
-		
+				structDelete(p, "orderID");
+			}
+
 			// Configure the gateway environment variables.
 			structInsert(p, "x_version", variables.cfpayment.GATEWAY_VERSION, "yes");
 			structInsert(p, "x_tran_key", getMerchantAccount(), "yes");
@@ -118,20 +112,13 @@
 			// The second is test mode where you can use "test" account numbers, etc. Both developer and production accounts can be set to test mode.
 			// However, if set to TRUE here, you can't do any follow-on trans like CAPTURE or VOID because x_trans_id is always 0
 			// But, if set to FALSE, you can't test AVS failures.
-			if (NOT structKeyExists(p, "x_test_request"))
-			{
+			if (NOT structKeyExists(p, "x_test_request")) {
 				structInsert(p, "x_test_request", "FALSE", "yes"); 
 			}
 
-
-			//sendEmail(p);
-		
 			// send it over the wire using the base gateway's transport function.
 			response = createResponse(argumentCollection = super.process(payload = p));
-
 			
-			//sendEmail(response.getParsedResult(), response.getResult(), response.getParsedResult(), response.getMemento());
-		
 			// do some meta-checks for gateway-level errors (as opposed to auth/decline errors)
 			if (NOT response.hasError()) {
 		
@@ -235,6 +222,9 @@
 					// copy in name and customer details
 					post = addCustomer(post = post, account = arguments.account, options = arguments.options);
 					post = addCreditCard(post = post, account = arguments.account, options = arguments.options);
+					post = addOrderItems(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
+					post = addShippingAddress(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
+					post = addOrderInfo(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
 					break;
 				}
 				default: {
@@ -264,6 +254,9 @@
 					// copy in name and customer details
 					post = addCustomer(post = post, account = arguments.account, options = arguments.options);
 					post = addCreditCard(post = post, account = arguments.account, options = arguments.options);
+					post = addOrderItems(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
+					post = addShippingAddress(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
+					post = addOrderInfo(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
 					break;
 				}
 				default: {
@@ -278,6 +271,7 @@
 
 	<cffunction name="capture" output="false" access="public" returntype="any" hint="Capture a prior authorization - set it to be settled.">
 		<cfargument name="money" type="any" required="true" />
+		<cfargument name="transactionID" type="any" required="false" />
 		<cfargument name="authorization" type="any" required="true" />
 		<cfargument name="options" type="struct" required="false" default="#structNew()#" />
 		<cfscript>
@@ -286,7 +280,7 @@
 			// set required values
 			structInsert(post, "x_amount", arguments.money.getAmount(), "yes");
 			structInsert(post, "x_type", "PRIOR_AUTH_CAPTURE", "yes");
-			structInsert(post, "x_trans_id", arguments.authorization, "yes");
+			structInsert(post, "x_trans_id", arguments.transactionID, "yes");
 
 			// capture can also take optional values:
 			// TODO: define optional values
@@ -297,7 +291,7 @@
 
 	<cffunction name="credit" output="false" access="public" returntype="any" hint="Refund all or part of a previous transaction">
 		<cfargument name="money" type="any" required="true" />
-		<cfargument name="transactionid" type="any" required="false" />
+		<cfargument name="transactionID" type="any" required="false" />
 		<cfargument name="account" type="any" required="false" />
 		<cfargument name="options" type="struct" required="false" default="#structNew()#" />
 		<cfscript>
@@ -306,13 +300,16 @@
 			// set required values
 			structInsert(post, "x_amount", arguments.money.getAmount(), "yes");
 			structInsert(post, "x_type", "CREDIT", "yes");
-			structInsert(post, "x_trans_id", arguments.transactionid, "yes");
+			structInsert(post, "x_trans_id", arguments.transactionID, "yes");
 
 			switch (lcase(listLast(getMetaData(arguments.account).fullname, "."))) {
 				case "creditcard": {
 					// copy in name and customer details
 					post = addCustomer(post = post, account = arguments.account, options = arguments.options);
 					post = addCreditCard(post = post, account = arguments.account, options = arguments.options);
+					post = addOrderItems(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
+					post = addShippingAddress(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
+					post = addOrderInfo(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
 					break;
 				}
 				default: {
@@ -329,14 +326,14 @@
 	</cffunction>
 
 	<cffunction name="void" output="false" access="public" returntype="any" hint="Cancel a pending transaction - must be called on an un-settled transaction.">
-		<cfargument name="transactionid" type="any" required="true" />
+		<cfargument name="transactionID" type="any" required="true" />
 		<cfargument name="options" type="struct" required="true" />
 		<cfscript>
 			var post = structNew();
 		
 			// set required values
 			structInsert(post, "x_type", "VOID", "yes");
-			structInsert(post, "x_trans_id", arguments.transactionid, "yes");
+			structInsert(post, "x_trans_id", arguments.transactionID, "yes");
 
 			//credit can also take optional values:
 			// TODO: define optional values
@@ -373,7 +370,7 @@
 			structInsert(arguments.post, "x_country", arguments.account.getCountry()); // Country for the customer's address
 
 			if (structKeyExists(arguments.options, "address") AND structKeyExists(arguments.options.address, "phone"))
-				structInsert(arguments.post, "x_phone", options.address.phone); // Customer's phone number
+				structInsert(arguments.post, "x_phone", arguments.options.address.phone); // Customer's phone number
 			else
 				structInsert(arguments.post, "x_phone", ""); // No phone number
 
@@ -402,6 +399,165 @@
 			structInsert(arguments.post, "x_card_code", arguments.account.getVerificationValue()); // Any valid CVV2, CVC2, or CID value
 
 			return arguments.post;
+		</cfscript>
+	</cffunction>
+
+	<cffunction name="addOrderItems" output="false" access="private" returntype="any" hint="Add order item details to the request object">
+		<cfargument name="post" type="struct" required="true" />
+		<cfargument name="account" type="any" required="true" />
+		<cfargument name="options" type="struct" required="true" />		
+		<cfscript>
+			var orderItems = [];
+			var orderItem = "";
+
+			if (structKeyExists(arguments.options, "orderItems") and isArray(arguments.options.orderItems)) {
+				for (orderItem in arguments.options.orderItems) {
+					if (isStruct(orderItem) AND NOT structIsEmpty(orderItem)) {
+						arrayAppend(orderItems, serializeOrderItem(orderItem));
+					}
+				}
+			}
+
+			structInsert(arguments.post, "x_line_item", orderItems); // Passing order line items as an array but base.cfc doesn't support this yet.
+
+			structDelete(arguments.options, "orderItems");
+			
+			return arguments.post;
+		</cfscript>
+	</cffunction>
+
+	<cffunction name="addShippingAddress" output="false" access="private" returntype="any" hint="Add order shipping details to the request object">
+		<cfargument name="post" type="struct" required="true" />
+		<cfargument name="account" type="any" required="true" />
+		<cfargument name="options" type="struct" required="true" />		
+		<cfscript>
+
+			if (structKeyExists(arguments.options, "shippingAddress") and isStruct(arguments.options.shippingAddress)) {
+				// Value: The first name associated with the customer's shipping address | Format: Up to 50 characters (no symbols)
+				if (structKeyExists(arguments.options.shippingAddress, "name"))
+					structInsert(arguments.post, "x_ship_to_first_name", left(listFirst(arguments.options.shippingAddress.name, " "), 50));
+				// Value: The last name associated with the customer's shipping address | Format: Up to 50 characters (no symbols)
+				if (structKeyExists(arguments.options.shippingAddress, "name"))
+					structInsert(arguments.post, "x_ship_to_last_name", left(listRest(arguments.options.shippingAddress.name, " "), 50));
+				// Value: The company associated with the customer's shipping address | Format: Up to 50 characters (no symbols)
+				if (structKeyExists(arguments.options.shippingAddress, "company"))
+					structInsert(arguments.post, "x_ship_to_company", left(arguments.options.shippingAddress.company, 50));
+				// Value: The customer's shipping address | Format: Up to 60 characters (no symbols)
+				if (structKeyExists(arguments.options.shippingAddress, "address")) {
+					structInsert(arguments.post, "x_ship_to_address", arguments.options.shippingAddress.address);
+					// Value: The customer's shipping address | Format: Up to 60 characters (no symbols)
+					if (structKeyExists(arguments.options.shippingAddress, "address2"))
+						arguments.post.x_ship_to_address &= arguments.options.shippingAddress.address2;
+					arguments.post.x_ship_to_address = left(arguments.post.x_ship_to_address, "60");
+				}
+				// Value: The city of the customer's shipping address | Format: Up to 40 characters (no symbols)
+				if (structKeyExists(arguments.options.shippingAddress, "city"))
+					structInsert(arguments.post, "x_ship_to_city", left(arguments.options.shippingAddress.city, "40"));
+				// Value: The state of the customer's shipping address | Format: Up to 40 characters (no symbols) or a valid two-character state code
+				if (structKeyExists(arguments.options.shippingAddress, "state"))
+					structInsert(arguments.post, "x_ship_to_state", left(arguments.options.shippingAddress.state, "40"));
+				// Value: The ZIP code of the customer's shipping address | Format: Up to 20 characters (no symbols)
+				if (structKeyExists(arguments.options.shippingAddress, "zip"))
+					structInsert(arguments.post, "x_ship_to_zip", left(arguments.options.shippingAddress.zip, "20"));
+				// Value: The country of the customer's shipping address | Format: Up to 60 characters (no symbols)
+				if (structKeyExists(arguments.options.shippingAddress, "country"))
+					structInsert(arguments.post, "x_ship_to_country", left(arguments.options.shippingAddress.country, "60"));
+			}
+
+			structDelete(arguments.options, "shippingAddress");
+			
+			return arguments.post;
+		</cfscript>
+	</cffunction>
+
+	<cffunction name="addOrderInfo" output="false" access="private" returntype="any" hint="Add order information to the request object">
+		<cfargument name="post" type="struct" required="true" />
+		<cfargument name="account" type="any" required="true" />
+		<cfargument name="options" type="struct" required="true" />		
+		<cfscript>
+			// This optional field can contain either the valid tax amount or the delimited tax information. The total amount of the transaction in x_amount must include this amount.
+			if (structKeyExists(arguments.options, "tax"))
+				structInsert(arguments.post, "x_tax", parseOptionDetail(arguments.options.tax));
+
+			// This optional field can contain either the valid freight amount, or delimited freight information. he total amount of the transaction in x_amount must include this amount.
+			if (structKeyExists(arguments.options, "shipping"))
+				structInsert(arguments.post, "x_freight", parseOptionDetail(arguments.options.shipping));
+
+			// This optional field can contain either the valid duty amount or delimited duty information. The total amount of the transaction in x_amount must include this amount.
+			if (structKeyExists(arguments.options, "duty"))
+				structInsert(arguments.post, "x_duty", parseOptionDetail(arguments.options.duty));
+
+			// This optional field can contain the tax exempt status of the order.
+			if (structKeyExists(arguments.options, "taxExempt"))
+				structInsert(arguments.post, "x_tax_exempt", yesNoFormat(arguments.options.taxExempt));
+
+			// This optional field can contain the merchant-assigned purchase order number, up to 25 characters, no symbols.
+			if (structKeyExists(arguments.options, "purchaseOrder"))
+				structInsert(arguments.post, "x_po_num", left(REReplaceNoCase(arguments.options.purchaseOrder, "[A-Z0-9]", "", "all"), 25));
+		
+			structDelete(arguments.options, "tax");
+			structDelete(arguments.options, "shipping");
+			structDelete(arguments.options, "duty");
+			structDelete(arguments.options, "taxExempt");
+			structDelete(arguments.options, "purchaseOrder");
+
+			return arguments.post;
+		</cfscript>
+	</cffunction>
+
+	<cffunction name="parseOptionDetail" output="false" access="private" hint="I parse an option that's a single value or a struct">
+		<cfargument name="option" required="yes" default="" />
+		<cfscript>
+			var parsed = ['', '', '0.00'];
+
+			if (isSimpleValue(arguments.option)) {
+				parsed = numberFormat(arguments.option, "0.00");
+			}
+			else if (isStruct(arguments.option)) {
+				if (structKeyExists(arguments.option, "name"))
+					parsed[1] = arguments.option.name;
+				if (structKeyExists(arguments.option, "description"))
+					parsed[2] = arguments.option.description;
+				if (structKeyExists(arguments.option, "amount"))
+					parsed[3] = numberFormat(arguments.option.amount, "0.00");
+
+				if (NOT len(parsed[1]))
+					parsed = parsed[3];
+				else
+					parsed = arrayToList(parsed, "<|>");
+			}
+
+			return parsed;
+		</cfscript>
+	</cffunction>
+
+	<cffunction name="serializeOrderItem" output="false" access="private" hint="I parse the options for a ">
+		<cfargument name="orderItem" required="yes" default="" />
+		<cfscript>
+			var parsed = ['UNDEFINED', 'Unknown Item', '', '0', '0', 'YES'];
+
+			// Required Value: The ID assigned to an item. Format: Up to 31 characters
+			if (structKeyExists(arguments.orderItem, "ID"))
+				parsed[1] = left(arguments.orderItem.ID, 31);
+			// Required Value: The name of an item. Format: Up to 31 characters
+			if (structKeyExists(arguments.orderItem, "name"))
+				parsed[2] = left(arguments.orderItem.name, 31);
+			// Optional Value: A detailed description of an item. Format: Up to 255 characters
+			if (structKeyExists(arguments.orderItem, "description"))
+				parsed[3] = left(arguments.orderItem.description, 255);
+			// Required Value: The quantity of the item on this order. Format: Up to two decimal places. Must be a positive number
+			if (structKeyExists(arguments.orderItem, "quantity"))
+				parsed[4] = numberFormat(arguments.orderItem.quantity, "_.__");
+			// Required Value: Cost of an item per unit, excluding tax, freight, and duty.
+			if (structKeyExists(arguments.orderItem, "price"))
+				parsed[5] = numberFormat(arguments.orderItem.price, "0.00");
+			// Optional (FALSE by default) Value: Indicates whether the item is subject to tax. Format: TRUE, FALSE, T, F, YES, NO, Y, N, 1, 0
+			if (structKeyExists(arguments.orderItem, "taxable"))
+				parsed[6] = yesNoFormat(arguments.orderItem.taxable);
+
+			parsed = arrayToList(parsed, "<|>");
+
+			return parsed;
 		</cfscript>
 	</cffunction>
 

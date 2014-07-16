@@ -336,8 +336,13 @@
 								<cfhttpparam name="#skey#" value="#arguments.payload[key][skey]#" type="#paramType#" encoded="#arguments.encoded#" />
 							</cfif>
 						</cfloop>
+					<cfelseif isArray(arguments.payload[key]) AND arrayLen(arguments.payload[key])>
+						<!--- loop over array and pass each item as a same-named param --->
+						<cfloop array="#arguments.payload[key]#" index="skey">
+							<cfhttpparam name="#key#" value="#skey#" type="#paramType#" encoded="#arguments.encoded#" />
+						</cfloop>
 					<cfelse>
-						<cfthrow message="Invalid data type for #key#" detail="The payload must be either XML/JSON/string or a struct" type="cfpayment.InvalidParameter.Payload" />
+						<cfthrow message="Invalid data type for #key#" detail="The payload must be either XML/JSON/string, a struct, or an array" type="cfpayment.InvalidParameter.Payload" />
 					</cfif>
 				</cfloop>
 				
