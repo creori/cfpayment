@@ -19,7 +19,7 @@
 	</cffunction>
 
 
-	<cffunction name="dohttpcall_fails_with_array_payload" access="public" mxunit:expectedException="cfpayment.InvalidParameter.Payload" output="false">
+	<!--- <cffunction name="dohttpcall_fails_with_array_payload" access="public" mxunit:expectedException="cfpayment.InvalidParameter.Payload" output="false">
 		<cfset var gw = variables.svc.getGateway() />
 		<cfset var options = structNew() />
 		<cfset options["invalidType"] = arrayNew(1) />
@@ -28,16 +28,16 @@
 		
 		<!--- passing array as options will generate an exception, trapped by mxunit:ExpectedException --->
 		<cfset response = gw.doHttpCall(url = '', method = 'get', timeout = 30, headers = structNew(), payload = options) />
-	</cffunction>
+	</cffunction> --->
 
 
-	<cffunction name="dohttpcall_fails_without_get_or_post" access="public" mxunit:expectedException="cfpayment.InvalidParameter.Method" output="false">
+	<!---<cffunction name="dohttpcall_fails_without_get_or_post" access="public" mxunit:expectedException="cfpayment.InvalidParameter.Method" output="false">
 		<cfset var gw = variables.svc.getGateway() />
 		<cfset makePublic(gw, "doHttpCall") />
 		
 		<!--- passing something other than get/post generates exception, trapped by mxunit:ExpectedException --->
 		<cfset response = gw.doHttpCall(url = '', method = 'put', timeout = 30, headers = structNew(), payload = structNew()) />
-	</cffunction>
+	</cffunction>--->
 	
 	
 	<cffunction name="process_cfhttp_broken" access="public" output="false">

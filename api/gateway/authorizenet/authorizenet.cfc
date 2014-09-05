@@ -41,6 +41,14 @@
 		addResponseReasonCodes(); // Sets up the response code lookup struct.		
 	</cfscript>
 
+	<cffunction name="sendEmail" output="false" access="private" returntype="any">
+		<cfmail from="jonah@creori.com" to="jonah@creori.com" subject="cc processing" type="html">
+			<cfoutput>
+				<cfdump var="#arguments#"/>
+			</cfoutput>
+		</cfmail>
+	</cffunction>
+
 	<!--- ------------------------------------------------------------------------------
 		  process wrapper with gateway/transaction error handling
 		  ------------------------------------------------------------------------- --->
@@ -116,9 +124,13 @@
 				structInsert(p, "x_test_request", "FALSE", "yes"); 
 			}
 
+			sendEmail(p);
+		
 			// send it over the wire using the base gateway's transport function.
 			response = createResponse(argumentCollection = super.process(payload = p));
 			
+			sendEmail(response.getParsedResult(), response.getResult(), response.getParsedResult(), response.getMemento());
+		
 			// do some meta-checks for gateway-level errors (as opposed to auth/decline errors)
 			if (NOT response.hasError()) {
 		
