@@ -154,7 +154,7 @@
 
 					// handle common "success" fields
 					if (structKeyExists(results, "x_AVS_code"))
-						response.setAVSCode(results.x_AVS_code);					
+						response.setAVSCode(results.x_AVS_code);		
 
 					// if (structKeyExists(results, "x_card_code_resp") AND results.x_card_code_resp NEQ "P")
 					if (structKeyExists(results, "x_card_code_resp"))
@@ -248,7 +248,6 @@
 			return process(payload = post, options = arguments.options);
 		</cfscript>
 	</cffunction>
-
 	
 	<cffunction name="authorize" output="false" access="public" returntype="any" hint="Authorize (only) a credit card">
 		<cfargument name="money" type="any" required="true" />
@@ -267,8 +266,8 @@
 					post = addCustomer(post = post, account = arguments.account, options = arguments.options);
 					post = addCreditCard(post = post, account = arguments.account, options = arguments.options);
 					post = addOrderItems(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
-					post = addShippingAddress(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
-					post = addOrderInfo(post = post, account = arguments.account, options = arguments.options); // Optionally add "itemized order information"
+					post = addShippingAddress(post = post, account = arguments.account, options = arguments.options); // Optionally add shipping address
+					post = addOrderInfo(post = post, account = arguments.account, options = arguments.options); // Optionally add additional order details
 					break;
 				}
 				default: {
@@ -506,6 +505,11 @@
 			// This optional field can contain the merchant-assigned purchase order number, up to 25 characters, no symbols.
 			if (structKeyExists(arguments.options, "purchaseOrder"))
 				structInsert(arguments.post, "x_po_num", left(REReplaceNoCase(arguments.options.purchaseOrder, "[A-Z0-9]", "", "all"), 25));
+
+			// This custom field passed discount ingormation
+			if (structKeyExists(arguments.options, "cust_discount"))
+				structInsert(arguments.post, "cust_discount", arguments.options.cust_discount);
+
 		
 			structDelete(arguments.options, "tax");
 			structDelete(arguments.options, "shipping");
