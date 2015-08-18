@@ -41,14 +41,6 @@
 		addResponseReasonCodes(); // Sets up the response code lookup struct.		
 	</cfscript>
 
-	<cffunction name="sendEmail" output="false" access="private" returntype="any">
-		<cfmail from="jonah@creori.com" to="jonah@creori.com" subject="cc processing" type="html">
-			<cfoutput>
-				<cfdump var="#arguments#"/>
-			</cfoutput>
-		</cfmail>
-	</cffunction>
-
 	<!--- ------------------------------------------------------------------------------
 		  process wrapper with gateway/transaction error handling
 		  ------------------------------------------------------------------------- --->
@@ -123,14 +115,10 @@
 			if (NOT structKeyExists(p, "x_test_request")) {
 				structInsert(p, "x_test_request", "FALSE", "yes"); 
 			}
-
-			sendEmail(p);
 		
 			// send it over the wire using the base gateway's transport function.
 			response = createResponse(argumentCollection = super.process(payload = p));
-			
-			sendEmail(response.getParsedResult(), response.getResult(), response.getParsedResult(), response.getMemento());
-		
+
 			// do some meta-checks for gateway-level errors (as opposed to auth/decline errors)
 			if (NOT response.hasError()) {
 		
@@ -208,8 +196,6 @@
 
 			// store parsed result
 			response.setParsedResult(results);
-		
-			//sendEmail(response.getMemento()); //response.getParsedResult(), response.getResult(), response.getRequestData(), 
 
 			return response;
 		</cfscript>
@@ -332,6 +318,8 @@
 			// credit can also take optional values:
 			// TODO: define optional values
 
+			// this.throw(post, "credit.post");
+
 			return process(payload = post, options = arguments.options);
 		</cfscript>
 	</cffunction>
@@ -427,11 +415,11 @@
 						arrayAppend(orderItems, serializeOrderItem(orderItem));
 					}
 				}
+
+				structInsert(arguments.post, "x_line_item", orderItems); // Passing order line items as an array but base.cfc doesn't support this yet.
+
+				structDelete(arguments.options, "orderItems");
 			}
-
-			structInsert(arguments.post, "x_line_item", orderItems); // Passing order line items as an array but base.cfc doesn't support this yet.
-
-			structDelete(arguments.options, "orderItems");
 			
 			return arguments.post;
 		</cfscript>
