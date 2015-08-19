@@ -218,10 +218,10 @@
 					</cfif>
 					
 					<!--- handle common "success" fields --->
-					<cfif structKeyExists(results, "avsresponse")>
+					<cfif structKeyExists(results, "avsresponse") AND len(results.avsresponse)>
 						<cfset response.setAVSCode(results.avsresponse) />					
 					</cfif>
-					<cfif structKeyExists(results, "cvvresponse")>
+					<cfif structKeyExists(results, "cvvresponse") AND len(results.cvvresponse)>
 						<cfset response.setCVVCode(results.cvvresponse) />					
 					</cfif>				
 	
@@ -461,6 +461,10 @@
 			<!--- in the direct deposit scenario, we need the account --->
 			<cfset post["type"] = "credit" />
 			<cfset post = addEFT(post = post, account = arguments.account, options = arguments.options) />
+		<cfelseif structKeyExists(arguments, "account") AND getService().getAccountType(arguments.account) EQ "token">
+			<!--- direct deposit using the vault --->
+			<cfset post["type"] = "credit" />
+			<cfset post = addToken(post = post, account = arguments.account) />
 		<cfelseif structKeyExists(arguments.options, "tokenId")>
 			<!--- direct deposit using the vault --->
 			<cfset post["type"] = "credit" />
@@ -468,6 +472,8 @@
 		<cfelseif structKeyExists(arguments, "transactionid")>
 			<cfset post["type"] = "refund" />
 			<cfset post["transactionid"] = arguments.transactionid />
+		<cfelse>
+			<cfthrow type="cfpayment.InvalidAccount" message="An account type of EFT, token or a tokenId or transactionId must be provided" />
 		</cfif>
 
 		<cfreturn process(payload = post, options = options) />
@@ -759,10 +765,10 @@
 				</cfif>
 				
 				<!--- handle common "success" fields --->
-				<cfif structKeyExists(results, "avs_response")>
+				<cfif structKeyExists(results, "avs_response") AND len(results.avs_response.xmlText)>
 					<cfset response.setAVSCode(results.avs_response.xmlText) />
 				</cfif>
-				<cfif structKeyExists(results, "csc_response")>
+				<cfif structKeyExists(results, "csc_response") AND len(results.csc_response.xmlText)>
 					<cfset response.setCVVCode(results.csc_response.xmlText) />
 				</cfif>				
 			
